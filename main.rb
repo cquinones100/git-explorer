@@ -49,6 +49,7 @@ class Log < CommandHandler
     show('Git Log') do |handler|
       @git.log.each do |commit|
         handler.option("#{(commit.message.split("\n")[0] || "")[0..50]}") do
+        system("git rebase -i #{commit}~1")
           system("echo #{commit} | pbcopy")
 
           "Copied to clipboard: #{commit}"

@@ -5,21 +5,12 @@ require "bundler/setup"
 require 'sorbet-runtime'
 require 'cli/ui'
 require 'open3'
-require 'git'
 require 'tty-prompt'
 require_relative './log'
 
 extend T::Sig
 
 command = ARGV[0]
-path = ARGV[1]
-
-if !command || !path
-  puts 'Usage: ruby main.rb <command> <path>'
-  exit
-end
-
-git = Git.open(path)
 
 class CommandHandler
   extend T::Sig
@@ -45,14 +36,9 @@ class CommandHandler
   end
 end
 
-class Status < CommandHandler
-  sig { params(git: Git::Base).void }
-  def initialize(git)
-    super(git)
+class Status
+  extend T::Sig
 
-    @added = T.let([], T::Array[String])
-  end
-  
   sig { void }
   def puts_status
     system('clear')
@@ -202,7 +188,7 @@ case command
 when 'log'
   Log.new.puts_log
 when 'status'
-  Status.new(git).puts_status
+  Status.new.puts_status
 end
 
 CLI::UI::StdoutRouter.enable

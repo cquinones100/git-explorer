@@ -9,5 +9,4 @@ gem "sorbet-runtime"
 gem "tapioca"
 gem 'cli-ui'
 gem 'pry-byebug'
-gem 'git'
 gem 'tty-prompt'

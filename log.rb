@@ -66,7 +66,7 @@ class Log
       end
     end
 
-    sha = prompt.select('Log', per_page: entries.size) do |menu|
+    sha = prompt.select('Log', per_page: [entries.size, 20].min) do |menu|
       menu.help "(Use j/k to move, space to select and enter to rebase to that SHA)"
 
       entries.each do |entry|

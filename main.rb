@@ -158,6 +158,7 @@ class Status < CommandHandler
     end
 
     puts_status
+  rescue TTY::Reader::InputInterrupt
   end
 
   private

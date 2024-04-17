@@ -7,6 +7,5 @@ source "https://rubygems.org"
 gem "sorbet"
 gem "sorbet-runtime"
 gem "tapioca"
-gem 'cli-ui'
 gem 'pry-byebug'
 gem 'tty-prompt'

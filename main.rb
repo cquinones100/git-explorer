@@ -3,7 +3,6 @@
 require "rubygems"
 require "bundler/setup"
 require 'sorbet-runtime'
-require 'cli/ui'
 require 'open3'
 require 'tty-prompt'
 require_relative './log'
@@ -192,5 +191,3 @@ when 'status'
   end
 rescue TTY::Reader::InputInterrupt
 end
-
-CLI::UI::StdoutRouter.enable

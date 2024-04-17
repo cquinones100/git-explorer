@@ -5,41 +5,188 @@ require "bundler/setup"
 require 'cli/ui'
 require 'open3'
 require 'git'
+require 'tty-prompt'
 
 extend T::Sig
 
 command = ARGV[0]
 path = ARGV[1]
 
+if !command || !path
+  puts 'Usage: ruby main.rb <command> <path>'
+  exit
+end
+
 git = Git.open(path)
 
-class Log
+class CommandHandler
   extend T::Sig
-  
+
   sig { params(git: Git::Base).void }
   def initialize(git)
     @git = T.let(git, Git::Base)
   end
-  
+
+  sig do
+    params(
+      title: String,
+      options_proc: T.proc.params(handler: ::CLI::UI::Prompt::OptionsHandler).void
+    ).returns(T.nilable(T.any(T::Array[String], String))
+  )
+  end
+  def show(title, &options_proc)
+    CLI::UI::Frame.open(title) do
+      CLI::UI::Prompt.ask('') do |handler|
+        yield(handler)
+      end
+    end
+  end
+end
+
+class Log < CommandHandler
   sig { void }
   def puts_log
-    CLI::UI::Frame.open('Git Log') do
-      CLI::UI::Prompt.ask('') do |handler|
-        @git.log.each do |commit|
-          handler.option("#{commit.to_s} - #{commit.author.name} - #{commit.date}") do
-            system("echo #{commit} | pbcopy")
+    show('Git Log') do |handler|
+      @git.log.each do |commit|
+        handler.option("#{(commit.message.split("\n")[0] || "")[0..50]}") do
+          system("echo #{commit} | pbcopy")
 
-            "Copied to clipboard: #{commit}"
-          end
+          "Copied to clipboard: #{commit}"
         end
       end
     end
   end
 end
 
+class Status < CommandHandler
+  sig { params(git: Git::Base).void }
+  def initialize(git)
+    super(git)
+
+    @added = T.let([], T::Array[String])
+  end
+  
+  sig { void }
+  def puts_status
+    system('clear')
+
+    prompt = T.let(TTY::Prompt.new(symbols: { cross: '' }), TTY::Prompt)
+
+    action = T.let(nil, T.nilable(String))
+
+    prompt.on(:keypress) do |event|
+      if event.value == "j"
+        prompt.trigger(:keydown)
+      end
+    
+      if event.value == "k"
+        prompt.trigger(:keyup)
+      end
+
+      if event.value == "a"
+        if action == "c"
+          action = "ca"
+        else
+          action = "add"
+        end
+
+        prompt.trigger(:keyenter)
+      end
+
+      if event.value == "u"
+        action = "unstage"
+
+        prompt.trigger(:keyenter)
+      end
+
+      if event.value == "c"
+        if action == "c"
+          action = "cc"
+          prompt.trigger(:keyenter)
+        else
+          action = "c"
+        end
+      end
+    end
+
+    path = prompt.select(
+      "Status", 
+      per_page: added.size + unstaged_files.size + untracked_files.size + 3
+    ) do |menu|
+      menu.help "(Use j/k to move, space to select and enter to finish)"
+      if added.any?
+        menu.choice "Added", 2, disabled: ''
+        added.each do |path|
+          menu.choice path, "#{path}"
+        end
+      end
+
+      if unstaged_files.any?
+        menu.choice "Changes not staged for commit:", 2, disabled: ''
+        unstaged_files.each do |path|
+          menu.choice path, "#{path}"
+        end
+      end
+
+      if untracked_files.any?
+        menu.choice "Untracked files:", 3, disabled: ''
+        untracked_files.each do |path|
+          menu.choice path, "#{path}"
+        end
+      end
+    end
+
+    case action
+    when "unstage"
+      unstage(path) if path
+    when "add"
+      add(path) if path
+    when "cc"
+      `git commit`
+    when "ca"
+      `git commit --amend`
+    else
+      system("code -g #{path}")
+    end
+
+    puts_status
+  end
+
+  private
+
+  sig { returns(T::Array[String]) }
+  def added
+    output = `git diff --name-only --cached`
+    output.split("\n").map(&:strip)
+  end
+
+  sig { returns(T::Array[String]) }
+  def unstaged_files
+    output = `git diff --name-only`
+    output.split("\n").map(&:strip)
+  end
+
+  sig { returns(T::Array[String]) }
+  def untracked_files
+    `git ls-files --others --exclude-standard`.split("\n").map(&:strip)
+  end
+
+  sig { params(path: String).void }
+  def add(path)
+    `git add #{path}`
+  end
+
+  sig { params(path: String).void }
+  def unstage(path)
+    `git reset #{path}`
+  end
+end
+
 case command
 when 'log'
   Log.new(git).puts_log
+when 'status'
+  Status.new(git).puts_status
 end
 
 CLI::UI::StdoutRouter.enable

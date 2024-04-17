@@ -93,6 +93,12 @@ class Status < CommandHandler
         prompt.trigger(:keyenter)
       end
 
+      if event.value == "A"
+        action = "add all"
+
+        prompt.trigger(:keyenter)
+      end
+
       if event.value == "u"
         action = "unstage"
 
@@ -141,6 +147,8 @@ class Status < CommandHandler
       unstage(path) if path
     when "add"
       add(path) if path
+    when "add all"
+      add(".")
     when "cc"
       `git commit`
     when "ca"

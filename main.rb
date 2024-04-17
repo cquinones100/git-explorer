@@ -106,10 +106,19 @@ class Status
     return if all_files.empty?
 
     path = prompt.select(
-      "Status", 
+      "Git Status", 
       per_page: all_files.size + 3
     ) do |menu|
-      menu.help "(Use j/k to move, space to select and enter to finish)"
+      menu.help <<-HELP
+
+j/k: scroll up/down
+a: add
+u: unstage
+enter: open file
+dv: open diff editor for file
+cc: commit
+ca: amend commit
+      HELP
       if added.any?
         menu.choice "Added", 2, disabled: ''
         added.each do |path|
@@ -144,7 +153,7 @@ class Status
     when "ca"
       `git commit --amend`
     when "dv"
-      `git difftool -y -x 'code --wait --diff'` 
+      `git difftool -y -x 'code --wait --diff -- #{path}'` 
     else
       system("code -g #{path}")
     end

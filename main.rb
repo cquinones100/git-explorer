@@ -151,7 +151,6 @@ class Status
     end
 
     puts_status
-  rescue TTY::Reader::InputInterrupt
   end
 
   private
@@ -184,11 +183,14 @@ class Status
   end
 end
 
+begin
 case command
 when 'log'
   Log.new.puts_log
 when 'status'
   Status.new.puts_status
+  end
+rescue TTY::Reader::InputInterrupt
 end
 
 CLI::UI::StdoutRouter.enable

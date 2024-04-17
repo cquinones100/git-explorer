@@ -97,6 +97,12 @@ class Status
           prompt.trigger(:keyenter)
         end
       end
+
+      if event.value == "X"
+        action = "checkout"
+
+        prompt.trigger(:keyenter)
+      end
     end
 
     all_files = added + unstaged_files + untracked_files
@@ -118,6 +124,7 @@ enter: open file
 dv: open diff editor for file
 cc: commit
 ca: amend commit
+X: checkout file
       HELP
       if added.any?
         menu.choice "Added", 2, disabled: ''
@@ -154,6 +161,8 @@ ca: amend commit
       `git commit --amend`
     when "dv"
       `git difftool -y -x 'code --wait --diff -- #{path}'` 
+    when "checkout"
+      `git checkout #{path}`
     else
       system("code -g #{path}")
     end

@@ -113,6 +113,18 @@ class Status < CommandHandler
           action = "c"
         end
       end
+
+      if event.value == "d"
+        action = "d"
+      end
+
+      if event.value == "v"
+        if action == "d"
+          action = "dv"
+
+          prompt.trigger(:keyenter)
+        end
+      end
     end
 
     all_files = added + unstaged_files + untracked_files
@@ -159,6 +171,8 @@ class Status < CommandHandler
       `git commit`
     when "ca"
       `git commit --amend`
+    when "dv"
+      `git difftool -y -x 'code --wait --diff'` 
     else
       system("code -g #{path}")
     end

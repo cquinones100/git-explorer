@@ -2,10 +2,12 @@
 
 require "rubygems"
 require "bundler/setup"
+require 'sorbet-runtime'
 require 'cli/ui'
 require 'open3'
 require 'git'
 require 'tty-prompt'
+require_relative './log'
 
 extend T::Sig
 
@@ -38,22 +40,6 @@ class CommandHandler
     CLI::UI::Frame.open(title) do
       CLI::UI::Prompt.ask('') do |handler|
         yield(handler)
-      end
-    end
-  end
-end
-
-class Log < CommandHandler
-  sig { void }
-  def puts_log
-    show('Git Log') do |handler|
-      @git.log.each do |commit|
-        handler.option("#{(commit.message.split("\n")[0] || "")[0..50]}") do
-        system("git rebase -i #{commit}~1")
-          system("echo #{commit} | pbcopy")
-
-          "Copied to clipboard: #{commit}"
-        end
       end
     end
   end
@@ -214,7 +200,7 @@ end
 
 case command
 when 'log'
-  Log.new(git).puts_log
+  Log.new.puts_log
 when 'status'
   Status.new(git).puts_status
 end

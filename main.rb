@@ -115,9 +115,15 @@ class Status < CommandHandler
       end
     end
 
+    all_files = added + unstaged_files + untracked_files
+
+    puts "nothing to commit, working tree clean" if all_files.empty?
+
+    return if all_files.empty?
+
     path = prompt.select(
       "Status", 
-      per_page: added.size + unstaged_files.size + untracked_files.size + 3
+      per_page: all_files.size + 3
     ) do |menu|
       menu.help "(Use j/k to move, space to select and enter to finish)"
       if added.any?

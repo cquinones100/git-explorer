@@ -12,30 +12,6 @@ extend T::Sig
 
 command = ARGV[0]
 
-class CommandHandler
-  extend T::Sig
-
-  sig { params(git: Git::Base).void }
-  def initialize(git)
-    @git = T.let(git, Git::Base)
-  end
-
-  sig do
-    params(
-      title: String,
-      options_proc: T.proc.params(handler: ::CLI::UI::Prompt::OptionsHandler).void
-    ).returns(T.nilable(T.any(T::Array[String], String))
-  )
-  end
-  def show(title, &options_proc)
-    CLI::UI::Frame.open(title) do
-      CLI::UI::Prompt.ask('') do |handler|
-        yield(handler)
-      end
-    end
-  end
-end
-
 class Status
   extend T::Sig
 

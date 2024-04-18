@@ -1,8 +1,10 @@
 gem:
   # Add your `gem` command parameters here:
   #
-  # exclude:
-  # - gem_name
+  exclude:
+  - thor
+  - spoom
+  - rbi
   # doc: true
   # workers: 5
 dsl:

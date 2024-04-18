@@ -39,8 +39,8 @@ end
 class Status
   extend T::Sig
 
-  sig { void }
-  def puts_status
+  sig { params(default: T.nilable(String)).void }
+  def puts_status(default = nil)
     system('clear')
 
     prompt = T.let(TTY::Prompt.new(symbols: { cross: '' }), TTY::Prompt)
@@ -127,6 +127,8 @@ cc: commit
 ca: amend commit
 X: checkout file
       HELP
+      menu.default(default) if default
+
       if added.any?
         menu.choice "Added", 2, disabled: ''
         added.each do |path|

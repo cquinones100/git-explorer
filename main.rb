@@ -106,26 +106,28 @@ X: checkout file
       menu.default(default) if default
 
       if added.any?
-        menu.choice "Added", 2, disabled: ''
+        menu.choice "Added", 'disabled', disabled: ''
         added.each do |path|
           menu.choice path, "#{path}"
         end
       end
 
       if unstaged_files.any?
-        menu.choice "Changes not staged for commit:", 2, disabled: ''
+        menu.choice "Changes not staged for commit:", 'disabled', disabled: ''
         unstaged_files.each do |path|
           menu.choice path, "#{path}"
         end
       end
 
       if untracked_files.any?
-        menu.choice "Untracked files:", 3, disabled: ''
+        menu.choice "Untracked files:", 'disabled', disabled: ''
         untracked_files.each do |path|
           menu.choice path, "#{path}"
         end
       end
     end
+
+    path = T.cast(path, String)
 
     case action
     when "unstage"

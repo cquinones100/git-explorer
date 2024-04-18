@@ -6,6 +6,7 @@ require 'sorbet-runtime'
 require 'open3'
 require 'tty-prompt'
 require_relative './log'
+require_relative './diff'
 
 extend T::Sig
 
@@ -160,17 +161,17 @@ X: checkout file
     when "ca"
       `git commit --amend`
     when "dv"
-      `git difftool -y -x 'code --wait --diff -- #{path}'` 
+      Diff.new(path).puts_diff
     when "checkout"
       `git checkout #{path}`
     else
       system("code -g #{path}")
     end
 
-    puts_status
-  end
+    path_index = T.must(all_files.find_index(path))
 
-  private
+    puts_status(all_files[path_index + 1] || all_files[path_index - 1])
+  end
 
   sig { returns(T::Array[String]) }
   def added
@@ -206,6 +207,8 @@ when 'log'
   Log.new.puts_log
 when 'status'
   Status.new.puts_status
-  end
+when 'diff'
+  Diff.new(ARGV[1]).puts_diff
+end
 rescue TTY::Reader::InputInterrupt
 end

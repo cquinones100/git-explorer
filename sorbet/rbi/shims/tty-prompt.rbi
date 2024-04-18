@@ -7,7 +7,7 @@ class TTY::Prompt
       options: T::Hash[Symbol, T.untyped],
       block: T.proc.params(menu: TTY::Prompt::List).void
     )
-      .returns(String)
+      .returns(T.any(Integer, String))
   end
   def select(message, *options, &block); end
 end

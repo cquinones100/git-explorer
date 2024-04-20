@@ -34,8 +34,6 @@ class Commit
 
   sig { returns(String) }
   def message
-    raise 'Issue loading message' unless lines[4]
-
     T.must(lines[4..-1]).map(&:strip).join("\n")
   end
 

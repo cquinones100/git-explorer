@@ -6,6 +6,20 @@ require_relative './unstaged_file'
 require_relative './untracked_file'
 require 'pastel'
 
+class StatusEventType < T::Enum
+  enums do
+    Unstage = new
+    Add = new
+    AddAll = new
+    Commit = new
+    Amend = new
+    DiffView = new
+    Checkout = new
+    CPressed = new
+    DPressed = new
+  end
+end
+
 class Status
   sig { returns(Pastel::Delegator) }
   attr_reader :pastel
@@ -21,7 +35,7 @@ class Status
 
     prompt = T.let(TTY::Prompt.new(symbols: { cross: '' }), TTY::Prompt)
 
-    action = T.let(nil, T.nilable(String))
+    action = T.let(nil, T.nilable(StatusEventType))
 
     prompt.on(:keypress) do |event|
       if event.value == "j"
@@ -33,50 +47,50 @@ class Status
       end
 
       if event.value == "a"
-        if action == "c"
-          action = "ca"
+        if action == StatusEventType::CPressed
+          action = StatusEventType::Amend
         else
-          action = "add"
+          action = StatusEventType::Add
         end
 
         prompt.trigger(:keyenter)
       end
 
       if event.value == "A"
-        action = "add all"
+        action = StatusEventType::AddAll
 
         prompt.trigger(:keyenter)
       end
 
       if event.value == "u"
-        action = "unstage"
+        action = StatusEventType::Unstage
 
         prompt.trigger(:keyenter)
       end
 
       if event.value == "c"
-        if action == "c"
-          action = "cc"
+        if action == StatusEventType::CPressed
+          action = StatusEventType::Commit
           prompt.trigger(:keyenter)
         else
-          action = "c"
+          action = StatusEventType::CPressed
         end
       end
 
       if event.value == "d"
-        action = "d"
+        action = StatusEventType::DPressed
       end
 
       if event.value == "v"
-        if action == "d"
-          action = "dv"
+        if action == StatusEventType::DPressed
+          action = StatusEventType::DiffView
 
           prompt.trigger(:keyenter)
         end
       end
 
       if event.value == "X"
-        action = "checkout"
+        action = StatusEventType::Checkout
 
         prompt.trigger(:keyenter)
       end
@@ -129,19 +143,19 @@ X: checkout file
     file = T.cast(file, T.any(StagedFile, UnstagedFile, UntrackedFile))
 
     case action
-    when "unstage"
+    when StatusEventType::Unstage
       file.unstage if file.is_a? StagedFile
-    when "add"
+    when StatusEventType::Add
       file.add if file.is_a? UnstagedFile
-    when "add all"
+    when StatusEventType::AddAll
       `git add .`
-    when "cc"
+    when StatusEventType::Commit
       `git commit`
-    when "ca"
+    when StatusEventType::Amend
       `git commit --amend`
-    when "dv"
+    when StatusEventType::DiffView
       file.puts_diff
-    when "checkout"
+    when StatusEventType::Checkout
       file.checkout
     else
       file.open_in_editor

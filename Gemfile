@@ -9,3 +9,4 @@ gem "sorbet-runtime"
 gem "tapioca"
 gem 'pry-byebug'
 gem 'tty-prompt'
+gem 'pastel'

@@ -4,8 +4,17 @@ require_relative './git_file'
 require_relative './staged_file'
 require_relative './unstaged_file'
 require_relative './untracked_file'
+require 'pastel'
 
 class Status
+  sig { returns(Pastel::Delegator) }
+  attr_reader :pastel
+
+  sig { void }
+  def initialize
+    @pastel = T.let(Pastel.new, Pastel::Delegator)
+  end
+
   sig { params(default: T.nilable(GitFile)).void }
   def puts_status(default = nil)
     system('clear')
@@ -95,26 +104,24 @@ cc: commit
 ca: amend commit
 X: checkout file
       HELP
-      menu.default(default.file_path) if default
-
       if added.any?
         menu.choice "Added", 'disabled', disabled: ''
         added.each do |file|
-          menu.choice file.file_path, file
+          menu.choice pastel.green(file.file_path), file
         end
       end
 
       if unstaged_files.any?
         menu.choice "Changes not staged for commit:", 'disabled', disabled: ''
         unstaged_files.each do |file|
-          menu.choice file.file_path, file
+          menu.choice pastel.red(file.file_path), file
         end
       end
 
       if untracked_files.any?
         menu.choice "Untracked files:", 'disabled', disabled: ''
         untracked_files.each do |file|
-          menu.choice file.file_path, file
+          menu.choice pastel.red(file.file_path), file
         end
       end
     end
@@ -122,7 +129,7 @@ X: checkout file
     file = T.cast(file, T.any(StagedFile, UnstagedFile, UntrackedFile))
 
     case action
-    when "unstaged"
+    when "unstage"
       file.unstage if file.is_a? StagedFile
     when "add"
       file.add if file.is_a? UnstagedFile

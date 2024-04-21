@@ -36,14 +36,16 @@ class Diff
   sig { returns(String) }
   attr_reader :path
 
-  sig { params(path: String).void }
-  def initialize(path)
-    @path = T.let(path, String)
+  sig { params(path: String, type: T.nilable(String)).void }
+  def initialize(path, type: nil)
+    @path = path
+    @type = type
   end
 
   sig { void }
   def puts_diff
     prompt = T.let(TTY::Prompt.new(symbols: { cross: '' }), TTY::Prompt)
+    event_type = T.let(nil, T.nilable(String))
 
     prompt.on(:keypress) do |event|
       if event.value == "j"
@@ -53,6 +55,16 @@ class Diff
       if event.value == "k"
         prompt.trigger(:keyup)
       end
+
+      if event.value == "a"
+        event_type = "a"
+        prompt.trigger(:keyenter)
+      end
+
+      if event.value == "x"
+        event_type = "x"
+        prompt.trigger(:keyenter)
+      end
     end
 
     selected_change = prompt.select("Select a change", per_page: 100) do |menu|
@@ -61,22 +73,39 @@ class Diff
       end
     end
 
-    if selected_change.is_a?(Integer)
-      patch_to_apply = T.must(changes[selected_change]).to_patch
+    return unless selected_change.is_a?(Integer)
+    return unless event_type
 
-      File.write("patch.patch", patch_to_apply)
-
-      system("git apply --cached -v patch.patch")
-
-      `rm patch.patch`
+    if event_type
+      case event_type
+      when "a"
+        patch_to_apply = T.must(changes[selected_change]).to_patch
+  
+        File.write("patch.patch", patch_to_apply)
+  
+        system("git apply --cached -v patch.patch")
+  
+        `rm patch.patch`
+      when "x"
+        require "pry"
+        binding.pry
+      end
     end
+
   end
 
   private
 
   sig { returns(String) }
   def diff
-    `git diff #{path}`
+    case @type
+    when "unstaged"
+      `git diff #{path}`
+    when "staged"
+      `git diff --staged #{path}`
+    else
+      raise "Unkown diff type, expected 'staged|unstaged'"
+    end
   end
 
   sig { returns(T::Array[String]) }
@@ -133,5 +162,8 @@ class Diff
     changes << current_change if current_change.any?
 
     changes.map { |change| Hunk.new(change, header)}
+
+
+
   end
 end

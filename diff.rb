@@ -1,8 +1,9 @@
-
 # typed: strict
 
 require 'sorbet-runtime'
 require 'tty-prompt'
+
+require_relative './status'
 
 class Hunk
   extend T::Sig
@@ -30,6 +31,14 @@ class Hunk
   end
 end
 
+class DiffEvent < T::Enum
+  enums do
+    Back = new
+    Checkout = new
+    Add = new
+  end
+end
+
 class Diff
   extend T::Sig
 
@@ -45,11 +54,12 @@ class Diff
   sig { void }
   def puts_diff
     prompt = T.let(TTY::Prompt.new(symbols: { cross: '' }), TTY::Prompt)
-    event_type = T.let(nil, T.nilable(String))
+    event_type = T.let(nil, T.nilable(DiffEvent))
 
     prompt.on(:keypress) do |event|
       if event.value == "j"
         prompt.trigger(:keydown)
+
       end
     
       if event.value == "k"
@@ -57,17 +67,31 @@ class Diff
       end
 
       if event.value == "a"
-        event_type = "a"
+        event_type = DiffEvent::Add
         prompt.trigger(:keyenter)
       end
 
       if event.value == "x"
-        event_type = "x"
+        event_type = DiffEvent::Checkout
         prompt.trigger(:keyenter)
+      end
+
+      if event.value == "\u000F"
+        event_type = DiffEvent::Back
+        prompt.trigger(:keyenter)
+
       end
     end
 
     selected_change = prompt.select("Select a change", per_page: 100) do |menu|
+      menu.help <<-HELP
+
+j/k: scroll up/down
+a: add
+u: unstage
+ctrl+o: back
+      HELP
+
       changes.each_with_index do |change, index|
         menu.choice(change.to_s, index)
       end
@@ -78,7 +102,7 @@ class Diff
 
     if event_type
       case event_type
-      when "a"
+      when DiffEvent::Add
         patch_to_apply = T.must(changes[selected_change]).to_patch
   
         File.write("patch.patch", patch_to_apply)
@@ -86,12 +110,10 @@ class Diff
         system("git apply --cached -v patch.patch")
   
         `rm patch.patch`
-      when "x"
-        require "pry"
-        binding.pry
+      when DiffEvent::Back
+        Status.new.puts_status
       end
     end
-
   end
 
   private

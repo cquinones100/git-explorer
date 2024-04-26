@@ -1,10 +1,14 @@
 # typed: strict
 
-require_relative './help_text'
 require_relative './git_file'
+require_relative './help_text'
+require_relative './menu_item'
 require_relative './staged_file'
+require_relative './text_box'
 require_relative './unstaged_file'
 require_relative './untracked_file'
+
+require 'io/console'
 require 'pastel'
 require 'tty-box'
 
@@ -60,82 +64,19 @@ class Status
 
   sig { params(default: T.nilable(GitFile)).void }
   def puts_status(default = nil)
-    system('clear')
-
-    prompt = T.let(TTY::Prompt.new(symbols: { cross: '' }), TTY::Prompt)
-
-    action = T.let(nil, T.nilable(StatusEventType))
-
-    prompt.on(:keypress) do |event|
-      if event.value == "j"
-        prompt.trigger(:keydown)
-      end
-    
-      if event.value == "k"
-        prompt.trigger(:keyup)
-      end
-
-      if event.value == "a"
-        if action == StatusEventType::CPressed
-          action = StatusEventType::Amend
-        else
-          action = StatusEventType::Add
-        end
-
-        prompt.trigger(:keyenter)
-      end
-
-      if event.value == "A"
-        action = StatusEventType::AddAll
-
-        prompt.trigger(:keyenter)
-      end
-
-      if event.value == "u"
-        action = StatusEventType::Unstage
-
-        prompt.trigger(:keyenter)
-      end
-
-      if event.value == "c"
-        if action == StatusEventType::CPressed
-          action = StatusEventType::Commit
-          prompt.trigger(:keyenter)
-        else
-          action = StatusEventType::CPressed
-        end
-      end
-
-      if event.value == "d"
-        action = StatusEventType::DPressed
-      end
-
-      if event.value == "v"
-        if action == StatusEventType::DPressed
-          action = StatusEventType::DiffView
-
-          prompt.trigger(:keyenter)
-        end
-      end
-
-      if event.value == "X"
-        action = StatusEventType::Checkout
-
-        prompt.trigger(:keyenter)
-      end
-    end
-
+    print "\e[?25l"
     all_files = added + unstaged_files + untracked_files
+    default ||= all_files.first
 
     if all_files.empty?
       puts "nothing to commit, working tree clean"
       return
     end
+    
+    container = HelpText.new("Git Status")
+    container.border = HelpText::BorderType::Top
 
-    all_sections = T.let([], T::Array[HelpText])
-
-    help_text = HelpText.new
-    help_text.text = <<-HELP
+    help_text = TextBox.new(<<-HELP, container:)
 j/k: scroll up/down
 a: add
 u: unstage
@@ -148,98 +89,70 @@ X: checkout file
 
     help_text.border = HelpText::BorderType::None
     help_text.margin_width(1)
-    all_sections << help_text
 
-    container = HelpText.new("Git Status")
-    container.border = HelpText::BorderType::Top
-    
-    help_text.top = container.padding
-    help_text.left = container.padding
-    
+    container.puts_frame
+
     git_output = GitOutput.new
-    
-    if git_output.has_changes?
-      if unstaged_files.any?
-        unstaged_files_section = HelpText.new("Changes not staged for commit:")
-        unstaged_files.each do |file|
-          unstaged_files_section << "modified: #{file.file_path}"
+
+    if !git_output.has_changes?
+      TextBox.new("nothing to commit, working tree clean", container:)
+    else
+      if added.any?
+        TextBox.new("Changes to be committed", container:)
+
+        added.each do |file|
+          MenuItem.new("  " + pastel.green(file.file_path), container:, selected: file == default)
         end
-        
-        unstaged_files_section.border = HelpText::BorderType::Top
-        unstaged_files_section.top = all_sections.sum(&:height) + (all_sections.size * container.padding)
-        unstaged_files_section.left = container.padding
-        unstaged_files_section.margin_width(1)
-        unstaged_files_section.height *= 2
-        
-        all_sections << unstaged_files_section
+      end
+
+      if unstaged_files.any?
+        TextBox.new("Changes not staged for commit:", container:)
+
+        unstaged_files.each do |file|
+          MenuItem.new("  " + pastel.red(file.file_path), container:, selected: file == default)
+        end
+      end
+
+      if untracked_files.any?
+        TextBox.new("Untracked files:", container:)
+
+        untracked_files.each do |file|
+          MenuItem.new("  " + pastel.red(file.file_path), container:, selected: file == default)
+        end
       end
     end
-    
-    container.height = all_sections.sum(&:height) + (all_sections.size * container.padding)
-    container.puts_frame
-    all_sections.each(&:puts_frame)
 
-    # options = HelpText.new
+    container.all_sections.each(&:puts_frame)
 
-    # options.margin_width(1)
-    # options.top = help_text.padding
-    # options.left = help_text.padding
-    # options.text = "On branch main"
+    default_index = all_files.find_index(default) || 0
 
-    # options.puts_frame
+    ARGV.clear
 
-    # file = prompt.select(
-    #   "Git Status", 
-    #   per_page: all_files.size + 3
-    # ) do |menu|
-    #   if added.any?
-    #     menu.choice "Added", 'disabled', disabled: ''
-    #     added.each do |file|
-    #       menu.choice pastel.green(file.file_path), file
-    #     end
-    #   end
+    input = T.unsafe(STDIN).getch
 
-    #   if unstaged_files.any?
-    #     menu.choice "Changes not staged for commit:", 'disabled', disabled: ''
-    #     unstaged_files.each do |file|
-    #       menu.choice pastel.red(file.file_path), file
-    #     end
-    #   end
+    case input
+    when "j"
+      puts_status(all_files[default_index + 1] || all_files[default_index])
+    when "k"
+      puts_status(all_files[[default_index - 1, 0].max])
+    when "a"
+      if default.is_a?(UnstagedFile)
+        default.add
+      end
 
-    #   if untracked_files.any?
-    #     menu.choice "Untracked files:", 'disabled', disabled: ''
-    #     untracked_files.each do |file|
-    #       menu.choice pastel.red(file.file_path), file
-    #     end
-    #   end
-    # end
+      system('clear')
+      Status.new.puts_status
+    when "u"
+      if default.is_a?(StagedFile)
+        default.unstage
+      end
 
-    # file = T.cast(file, T.any(StagedFile, UnstagedFile, UntrackedFile))
-
-    # case action
-    # when StatusEventType::Unstage
-    #   file.unstage if file.is_a? StagedFile
-    # when StatusEventType::Add
-    #   file.add if file.is_a? UnstagedFile
-    # when StatusEventType::AddAll
-    #   `git add .`
-    # when StatusEventType::Commit
-    #   `git commit`
-    # when StatusEventType::Amend
-    #   `git commit --amend`
-    # when StatusEventType::DiffView
-    #   file.puts_diff
-    # when StatusEventType::Checkout
-    #   file.checkout
-    # else
-    #   file.open_in_editor
-    # end
-
-    # file_index = T.must(all_files.find_index(file))
-
-    # file_to_puts = all_files[file_index + 1] || all_files[file_index - 1]
-
-    # Status.new.puts_status(file_to_puts)
+      system('clear')
+      Status.new.puts_status
+    when "\u0003"
+      puts "Exiting..."
+      system('clear')
+    end
   end
 
   sig { returns(T::Array[StagedFile]) }

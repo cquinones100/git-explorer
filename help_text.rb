@@ -1,5 +1,6 @@
 # typed: strict
 
+require_relative './spacer'
 require 'tty-box'
 require 'tty-screen'
 
@@ -31,6 +32,9 @@ class HelpText
   sig { returns(Integer) }
   attr_reader :padding
 
+  sig { params(padding: Integer).void }
+  attr_writer :padding
+
   sig { params(top: Integer).returns(Integer) }
   attr_writer :top
   sig { returns(Integer) }
@@ -44,6 +48,12 @@ class HelpText
   sig { returns(T.nilable(BorderShape)) }
   attr_reader :border
 
+  sig { returns(T::Array[HelpText])}
+  attr_reader :all_sections
+
+  sig { returns(T::Array[T.any(Spacer, HelpText)])}
+  attr_reader :rendered_items
+
   sig { params(title: T.nilable(String), width: T.nilable(Integer), height: T.nilable(Integer)).void }
   def initialize(title = nil, width: nil, height: nil)
     @title = T.let(title, T.nilable(String))
@@ -54,6 +64,8 @@ class HelpText
     @top = T.let(0, Integer)
     @left = T.let(0, Integer)
     @border = T.let(nil, T.nilable(BorderShape))
+    @all_sections = T.let([], T::Array[HelpText])
+    @rendered_items = T.let([Spacer.new], T::Array[T.any(Spacer, HelpText)])
   end
 
   sig { params(value: Integer).void }
@@ -71,9 +83,7 @@ class HelpText
     @text = text
     text_height = text.split("\n").size
 
-    if text_height > height
-      self.height = text_height * 1.5
-    end
+    self.height = text.split("\n").size + 2
   end
 
   sig { params(next_line: String).void }
@@ -82,9 +92,7 @@ class HelpText
     @text += next_line
     text_height = text.split("\n").size
 
-    if text_height > height
-      self.height = text_height * 1.5
-    end
+    self.height = text.split("\n").size + 2
   end
 
   sig { params(type: BorderType).void }
@@ -112,6 +120,9 @@ class HelpText
         bottom_left: false,
         bottom_right: false
       }
+      
+
+
     end
   end
 

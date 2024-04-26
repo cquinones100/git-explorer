@@ -184,8 +184,5 @@ ctrl+o: back
     changes << current_change if current_change.any?
 
     changes.map { |change| Hunk.new(change, header)}
-
-
-
   end
 end

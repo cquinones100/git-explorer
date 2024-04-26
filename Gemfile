@@ -8,5 +8,7 @@ gem "sorbet"
 gem "sorbet-runtime"
 gem "tapioca"
 gem 'pry-byebug'
+gem 'tty-box'
 gem 'tty-prompt'
+gem 'tty-screen'
 gem 'pastel'

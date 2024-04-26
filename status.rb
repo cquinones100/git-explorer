@@ -1,10 +1,12 @@
 # typed: strict
 
+require_relative './help_text'
 require_relative './git_file'
 require_relative './staged_file'
 require_relative './unstaged_file'
 require_relative './untracked_file'
 require 'pastel'
+require 'tty-box'
 
 class StatusEventType < T::Enum
   enums do
@@ -21,6 +23,33 @@ class StatusEventType < T::Enum
 end
 
 class Status
+  class GitOutput
+    sig { void }
+    def initialize
+      @output = T.let(`git status`, String)
+    end
+
+    sig { returns(T.nilable(String)) }
+    def branch_line
+      output.split("\n").find { |line| line.start_with?("On branch") }
+    end
+
+    sig { returns(T.nilable(String)) }
+    def relative_info_line
+      output.split("\n").find { |line| line.start_with?("Your branch is") }
+    end
+
+    sig { returns(T::Boolean) }
+    def has_changes?
+      !output.split("\n").include?("nothing to commit")
+    end
+
+    private
+
+    sig { returns(String) }
+    attr_reader :output
+  end
+
   sig { returns(Pastel::Delegator) }
   attr_reader :pastel
 
@@ -103,12 +132,10 @@ class Status
       return
     end
 
-    file = prompt.select(
-      "Git Status", 
-      per_page: all_files.size + 3
-    ) do |menu|
-      menu.help <<-HELP
+    all_sections = T.let([], T::Array[HelpText])
 
+    help_text = HelpText.new
+    help_text.text = <<-HELP
 j/k: scroll up/down
 a: add
 u: unstage
@@ -117,55 +144,102 @@ dv: open diff editor for file
 cc: commit
 ca: amend commit
 X: checkout file
-      HELP
-      if added.any?
-        menu.choice "Added", 'disabled', disabled: ''
-        added.each do |file|
-          menu.choice pastel.green(file.file_path), file
-        end
-      end
+    HELP
 
+    help_text.border = HelpText::BorderType::None
+    help_text.margin_width(1)
+    all_sections << help_text
+
+    container = HelpText.new("Git Status")
+    container.border = HelpText::BorderType::Top
+    
+    help_text.top = container.padding
+    help_text.left = container.padding
+    
+    git_output = GitOutput.new
+    
+    if git_output.has_changes?
       if unstaged_files.any?
-        menu.choice "Changes not staged for commit:", 'disabled', disabled: ''
+        unstaged_files_section = HelpText.new("Changes not staged for commit:")
         unstaged_files.each do |file|
-          menu.choice pastel.red(file.file_path), file
+          unstaged_files_section << "modified: #{file.file_path}"
         end
-      end
-
-      if untracked_files.any?
-        menu.choice "Untracked files:", 'disabled', disabled: ''
-        untracked_files.each do |file|
-          menu.choice pastel.red(file.file_path), file
-        end
+        
+        unstaged_files_section.border = HelpText::BorderType::Top
+        unstaged_files_section.top = all_sections.sum(&:height) + (all_sections.size * container.padding)
+        unstaged_files_section.left = container.padding
+        unstaged_files_section.margin_width(1)
+        unstaged_files_section.height *= 2
+        
+        all_sections << unstaged_files_section
       end
     end
+    
+    container.height = all_sections.sum(&:height) + (all_sections.size * container.padding)
+    container.puts_frame
+    all_sections.each(&:puts_frame)
 
-    file = T.cast(file, T.any(StagedFile, UnstagedFile, UntrackedFile))
+    # options = HelpText.new
 
-    case action
-    when StatusEventType::Unstage
-      file.unstage if file.is_a? StagedFile
-    when StatusEventType::Add
-      file.add if file.is_a? UnstagedFile
-    when StatusEventType::AddAll
-      `git add .`
-    when StatusEventType::Commit
-      `git commit`
-    when StatusEventType::Amend
-      `git commit --amend`
-    when StatusEventType::DiffView
-      file.puts_diff
-    when StatusEventType::Checkout
-      file.checkout
-    else
-      file.open_in_editor
-    end
+    # options.margin_width(1)
+    # options.top = help_text.padding
+    # options.left = help_text.padding
+    # options.text = "On branch main"
 
-    file_index = T.must(all_files.find_index(file))
+    # options.puts_frame
 
-    file_to_puts = all_files[file_index + 1] || all_files[file_index - 1]
+    # file = prompt.select(
+    #   "Git Status", 
+    #   per_page: all_files.size + 3
+    # ) do |menu|
+    #   if added.any?
+    #     menu.choice "Added", 'disabled', disabled: ''
+    #     added.each do |file|
+    #       menu.choice pastel.green(file.file_path), file
+    #     end
+    #   end
 
-    Status.new.puts_status(file_to_puts)
+    #   if unstaged_files.any?
+    #     menu.choice "Changes not staged for commit:", 'disabled', disabled: ''
+    #     unstaged_files.each do |file|
+    #       menu.choice pastel.red(file.file_path), file
+    #     end
+    #   end
+
+    #   if untracked_files.any?
+    #     menu.choice "Untracked files:", 'disabled', disabled: ''
+    #     untracked_files.each do |file|
+    #       menu.choice pastel.red(file.file_path), file
+    #     end
+    #   end
+    # end
+
+    # file = T.cast(file, T.any(StagedFile, UnstagedFile, UntrackedFile))
+
+    # case action
+    # when StatusEventType::Unstage
+    #   file.unstage if file.is_a? StagedFile
+    # when StatusEventType::Add
+    #   file.add if file.is_a? UnstagedFile
+    # when StatusEventType::AddAll
+    #   `git add .`
+    # when StatusEventType::Commit
+    #   `git commit`
+    # when StatusEventType::Amend
+    #   `git commit --amend`
+    # when StatusEventType::DiffView
+    #   file.puts_diff
+    # when StatusEventType::Checkout
+    #   file.checkout
+    # else
+    #   file.open_in_editor
+    # end
+
+    # file_index = T.must(all_files.find_index(file))
+
+    # file_to_puts = all_files[file_index + 1] || all_files[file_index - 1]
+
+    # Status.new.puts_status(file_to_puts)
   end
 
   sig { returns(T::Array[StagedFile]) }

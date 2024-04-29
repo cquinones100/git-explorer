@@ -3,6 +3,7 @@
 require_relative './git_file'
 require_relative './help_text'
 require_relative './menu_item'
+require_relative './screen'
 require_relative './staged_file'
 require_relative './text_box'
 require_relative './unstaged_file'
@@ -10,7 +11,6 @@ require_relative './untracked_file'
 
 require 'io/console'
 require 'pastel'
-require 'tty-box'
 
 class StatusEventType < T::Enum
   enums do
@@ -31,6 +31,9 @@ class Status
     sig { void }
     def initialize
       @output = T.let(`git status`, String)
+      @added_files = T.let(nil, T.nilable(T::Array[StagedFile]))
+      @unstaged_files = T.let(nil, T.nilable(T::Array[UnstagedFile]))
+      @untracked_files = T.let(nil, T.nilable(T::Array[UntrackedFile]))
     end
 
     sig { returns(T.nilable(String)) }
@@ -48,35 +51,60 @@ class Status
       !output.split("\n").include?("nothing to commit")
     end
 
+    sig { returns(String) }
+    def raw
+      output
+    end
+
+    sig { returns(String) }
+    def intro
+      output
+        .split("\n")
+        .take_while do |line|
+          !line.include?("Changes to be committed") &&
+          !line.include?("Changes not staged for commit") &&
+          !line.include?("Untracked files")
+        end
+        .join("\n")
+    end
+
+    sig { returns(T::Array[StagedFile]) }
+    def added_files
+      return @added_files if @added_files
+
+      output = `git diff --name-only --cached`
+      @added_files = output.split("\n")
+        .map(&:strip)
+        .map { |file_path| StagedFile.new(file_path:) }
+    end
+
+    sig { returns(T::Array[UnstagedFile]) }
+    def unstaged_files
+      return @unstaged_files if @unstaged_files
+
+      output = `git diff --name-only`
+      @unstaged_files = output.split("\n")
+        .map(&:strip)
+        .map { |file_path| UnstagedFile.new(file_path:) }
+    end
+
+    sig { returns(T::Array[UntrackedFile]) }
+    def untracked_files
+      return @untracked_files if @untracked_files
+
+      @untracked_files = 
+        `git ls-files --others --exclude-standard`.split("\n")
+        .map(&:strip)
+        .map { |file_path| UntrackedFile.new(file_path:) }
+    end
+
     private
 
     sig { returns(String) }
     attr_reader :output
   end
 
-  sig { returns(Pastel::Delegator) }
-  attr_reader :pastel
-
-  sig { void }
-  def initialize
-    @pastel = T.let(Pastel.new, Pastel::Delegator)
-  end
-
-  sig { params(default: T.nilable(GitFile)).void }
-  def puts_status(default = nil)
-    print "\e[?25l"
-    all_files = added + unstaged_files + untracked_files
-    default ||= all_files.first
-
-    if all_files.empty?
-      puts "nothing to commit, working tree clean"
-      return
-    end
-    
-    container = HelpText.new("Git Status")
-    container.border = HelpText::BorderType::Top
-
-    help_text = TextBox.new(<<-HELP, container:)
+  HELP_TEXT = <<-HELP_TEXT
 j/k: scroll up/down
 a: add
 u: unstage
@@ -85,100 +113,120 @@ dv: open diff editor for file
 cc: commit
 ca: amend commit
 X: checkout file
-    HELP
+  HELP_TEXT
 
-    help_text.border = HelpText::BorderType::None
-    help_text.margin_width(1)
+  sig { returns(Pastel::Delegator) }
+  attr_reader :pastel
 
-    container.puts_frame
+  sig { returns(Screen) }
+  attr_reader :screen
 
+  sig { void }
+  def initialize
+    @pastel = T.let(Pastel.new, Pastel::Delegator)
+    @screen = T.let(Screen.new, Screen)
+    @current_file_index = T.let(0, Integer)
+    @all_file_lines = T.let([], T::Array[String])
+  end
+
+  sig { params(default: T.nilable(GitFile)).void }
+  def puts_status(default = nil)
+    screen.on_tick do |input|
+      case input
+      when "j"
+        self.current_file_index = [self.current_file_index + 1, all_file_lines.length - 1].min
+
+        screen.cursor_position = T.must(screen.buffer.index(T.must(all_file_lines[self.current_file_index])))
+      when "k"
+        self.current_file_index = [self.current_file_index - 1, 0].max
+
+        screen.cursor_position = T.must(screen.buffer.index(T.must(all_file_lines[self.current_file_index])))
+      when "a"
+        file = self.all_file_lines[self.current_file_index]
+
+        file = T.must(file).gsub(/\e\[[0-9;]*[a-zA-Z]/, '')
+
+        system("git add #{file}")
+
+        self.draw_buffer
+      when "u"
+        file = self.all_file_lines[self.current_file_index]
+
+        file = T.must(file).gsub(/\e\[[0-9;]*[a-zA-Z]/, '')
+
+        `git reset #{file}`
+
+        self.draw_buffer
+      end
+    end
+
+    draw_buffer
+
+    screen.start
+  rescue => e
+    screen.reset
+    raise e
+  end
+
+  private
+
+  sig { void }
+  def draw_buffer
+    self.all_file_lines = []
     git_output = GitOutput.new
+    buffer = T.let("", String)
 
-    if !git_output.has_changes?
-      TextBox.new("nothing to commit, working tree clean", container:)
-    else
-      if added.any?
-        TextBox.new("Changes to be committed", container:)
+    buffer += HELP_TEXT
+    buffer += "\n"
+    buffer += git_output.intro
 
-        added.each do |file|
-          MenuItem.new("  " + pastel.green(file.file_path), container:, selected: file == default)
-        end
-      end
+    if git_output.added_files.any?
+      buffer += "\nChanges to be committed\n" 
 
-      if unstaged_files.any?
-        TextBox.new("Changes not staged for commit:", container:)
-
-        unstaged_files.each do |file|
-          MenuItem.new("  " + pastel.red(file.file_path), container:, selected: file == default)
-        end
-      end
-
-      if untracked_files.any?
-        TextBox.new("Untracked files:", container:)
-
-        untracked_files.each do |file|
-          MenuItem.new("  " + pastel.red(file.file_path), container:, selected: file == default)
-        end
+      git_output.added_files.each do |file|
+        file_line = "  #{pastel.green(file.file_path)}\n"
+        buffer += file_line
+        all_file_lines << file_line
       end
     end
 
-    container.all_sections.each(&:puts_frame)
+    if git_output.unstaged_files.any?
+      buffer += "\nChanges not staged for commit:\n"
 
-    default_index = all_files.find_index(default) || 0
-
-    ARGV.clear
-
-    input = T.unsafe(STDIN).getch
-
-    case input
-    when "j"
-      puts_status(all_files[default_index + 1] || all_files[default_index])
-    when "k"
-      puts_status(all_files[[default_index - 1, 0].max])
-    when "a"
-      if default.is_a?(UnstagedFile)
-        default.add
+      git_output.unstaged_files.each do |file|
+        file_line = "  #{pastel.red(file.file_path)}\n"
+        buffer += file_line
+        all_file_lines << file_line
       end
+    end
 
-      system('clear')
-      Status.new.puts_status
-    when "u"
-      if default.is_a?(StagedFile)
-        default.unstage
+    if git_output.untracked_files.any?
+      buffer += "\nUntracked files:\n"
+      git_output.untracked_files.each do |file|
+        file_line = "  #{pastel.red(file.file_path)}\n"
+        buffer += file_line
+        all_file_lines << file_line
       end
+    end
 
-      system('clear')
-      Status.new.puts_status
-    when "\u0003"
-      puts "Exiting..."
-      system('clear')
+    screen.buffer = buffer
+
+    if all_file_lines.any?
+      current_file = T.must(all_file_lines[current_file_index])
+
+      screen.cursor_position = T.must(screen.buffer.index(current_file))
     end
   end
 
-  sig { returns(T::Array[StagedFile]) }
-  def added
-    @added ||= T.let(begin
-      output = `git diff --name-only --cached`
-      output.split("\n")
-        .map(&:strip)
-        .map { |file_path| StagedFile.new(file_path:) }
-    end, T.nilable(T::Array[StagedFile]))
-  end
+  sig { returns(Integer)}
+  attr_reader :current_file_index
 
-  sig { returns(T::Array[UnstagedFile]) }
-  def unstaged_files
-    @unstaged_files ||= T.let(begin
-    output = `git diff --name-only`
-    output.split("\n")
-      .map(&:strip)
-      .map { |file_path| UnstagedFile.new(file_path:) }
-    end, T.nilable(T::Array[UnstagedFile]))
-  end
+  sig { params(current_file_index: Integer).void }
+  attr_writer :current_file_index
 
-  sig { returns(T::Array[UntrackedFile]) }
-  def untracked_files
-    @untracked_files ||= T.let(`git ls-files --others --exclude-standard`.split("\n")
-      .map(&:strip)
-      .map { |file_path| UntrackedFile.new(file_path:) }, T.nilable(T::Array[UntrackedFile]))
-  end
+  sig { returns(T::Array[String]) }
+  attr_reader :all_file_lines
+
+  sig { params(all_file_lines: T::Array[String]).void }
+  attr_writer :all_file_lines
 end
